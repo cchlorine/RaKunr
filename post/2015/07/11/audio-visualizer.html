@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=1, minimum-scale=1, maximum-scale=1">
+    <meta name="keywords" content="RaKunr, Ra of Rakume, Kunr of Kunr.">
+    <meta name="description" content="Ra of Rakume, Kunr of Kunr.">
+    <link href='//fonts.lug.ustc.edu.cn/css?family=Cinzel+Decorative' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="/blog//css/style.css">
+    <link rel="stylesheet" href="/blog//css/github.css">
+    <title>Audio API：音频可视化的实现 - RaKunr</title>
+</head>
+<body>
+    <header id="header" class="no-index">
+        <div class="container">
+            <h1>Audio API：音频可视化的实现</h1>
+            <h2><span class="date" data-time="1436621700">
+                <span class="from"></span>
+                
+            </span></h2>
+        </div>
+
+        <nav id="nav">
+    <div class="container">
+        <a class="index" href="/blog//">RaKunr</a>
+        <a href="/blog//about.html">About</a>
+        
+        <a href="javascript:;" class="nav-switch"></a>
+  </div>
+</nav>
+
+
+        <div id="header-bg"></div>
+    </header>
+
+    <main class="container">
+        <article class="article">
+            <section class="article-content">
+                <p>看一些音乐播放器带有音频可视化，然而现在 HTML5 也发展的如此迅速，于是我想，能不能利用 Audio API 和 Canvas 来实现音频可视化的描绘。</p>
+
+<h2>思路</h2>
+
+<p>为了实现音频可视化，我们得先知道 Audio API 的工作思路。
+于是我在 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API">MDN</a> 得到了下图：</p>
+
+<p><img data-src="https://hime.io/images/2015/07/08/4029390894603953.png" alt="" /></p>
+
+<p>通过上图，我们能知道，在声音播放到扬声器前，要经过许多效果节点，这就是我们如何实现音频可视化的关键，这篇文章当中我们需要的是 <a href="https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode">AnalyserNode</a>。</p>
+
+<h2>兼容情况</h2>
+
+<p>Audio API 在不同的浏览器下有不同的支持情况，为了避免使用私有前缀的麻烦，我们就用下面的代码。</p>
+
+<pre><code class="language-javascript">window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
+</code></pre>
+
+<p>更详细的情况可移步：
+Audio API: <a href="http://caniuse.com/#feat=audio-api">http://caniuse.com/#feat=audio-api</a>
+Canvas: <a href="http://caniuse.com/#feat=canvas">http://caniuse.com/#feat=canvas</a>
+RequestAnimationFrame: <a href="http://caniuse.com/#feat=requestanimationframe">http://caniuse.com/#feat=requestanimationframe</a></p>
+
+<h2>创建音频环境</h2>
+
+<pre><code class="language-javascript">var audioContext = new window.AudioContext;
+</code></pre>
+
+<p>这个写法，没有问题。但是别忘记，AudioContext 并不支持 IE，我又不想他报错所以，加个 <code>try catch</code></p>
+
+<pre><code class="language-javascript">try {
+   var audioContext = new window.AudioContext;
+} catch (e) {
+    console.log('AudioContext does not support your browser');
+}
+</code></pre>
+
+<h2>载入音频</h2>
+
+<p>即使创建了音频环境，我们没有没有音频也没法渲染的，所以我们需要载入音频。</p>
+
+<h3>通过 Ajax 载入文件</h3>
+
+<p>通过 Ajax 载入文件需要注意 <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy">同源策略</a> 不然会踩一个大坑。</p>
+
+<pre><code class="language-javascript">var request = function(url, callback) {
+  var req = new XMLHttpRequest;
+  
+  req.open('GET', url, true);
+  req.responseType = 'arraybuffer';
+  req.onload = function() {
+    if (typeof callback === 'function') {       
+        callback(req.response);
+    }
+  };
+
+  req.send();
+};
+</code></pre>
+
+<h3>通过 input 载入文件</h3>
+
+<p>通过监听 input 的 <code>onchange</code> 事件来实现载入文件。
+完整的实现代码：</p>
+
+<h4>HTML Part</h4>
+
+<pre><code class="language-markup">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;body&gt;
+    &lt;input type=&quot;file&quot; id=&quot;uploadFile&quot;&gt;&lt;/input&gt;
+    &lt;canvas id=&quot;canvas&quot; height=&quot;300&quot; width=&quot;1200&quot;&gt;&lt;/canvas&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<h4>JavaScript Part</h4>
+
+<pre><code class="language-javascript">window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
+
+window.requestAnimationFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.msRequestAnimationFrame;
+
+var Analyser = {
+  init: function() {
+    // 判断是否支持 AudioContext
+    try {
+      this.audio = new window.AudioContext();
+    } catch (e) {
+      console.log('AudioContext does not support your browser');
+      return false;
+    }
+
+    this.eventInit(); // 事件初始化
+  },
+
+  eventInit: function() {
+    var that = this;
+
+    that.file = new Object;
+    that.audioInput = document.getElementById('uploadFile');
+    that.audioCanvas = document.getElementById('canvas');
+
+    that.audioInput.addEventListener('change', function() {
+      // 防止空文件
+      if (that.audioInput.files.length !== 0) {
+        if (that.file.name === that.audioInput.files[0].name) return; // 为了统一 Chrome 和 Firefox 下的表现，选择同一文件是 Firefox 会做出表现，而 Chrome 并不会。
+                
+        that.file = that.audioInput.files[0]; // 将文件赋值到 Visualizer 对象的属性上
+        that.buffer();
+      }
+    }, false); // 注册事件
+  },
+
+  buffer: function() {
+  },
+
+  visualizer: function(analyser) {
+  }
+};
+
+Analyser.init();
+</code></pre>
+
+<h3>通过拖拽载入文件</h3>
+
+<p>监听 <code>canvas</code> 的  <code>dragenter</code>  <code>dragover</code> <code>drop</code> 等事件，可实现和 input 相同的效果。</p>
+
+<p>这里的代码直接对上面增加修改的部分展现</p>
+
+<h3>JavaScript Part</h3>
+
+<pre><code class="language-javascript">eventInit: function() {
+...
+    that.audioCanvas.addEventListener('dragover', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy'
+    }, false);
+
+    that.audioCanvas.addEventListener('drop', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+
+      if (that.file.name === e.dataTransfer.files[0].name) return;
+      that.file = e.dataTransfer.files[0];
+      that.buffer();
+    }, false);
+...
+</code></pre>
+
+<p>更多的实现方法参考：
+<a href="https://developer.mozilla.org/en-US/docs/Using_files_from_web_applications">https://developer.mozilla.org/en-US/docs/Using_files_from_web_applications</a></p>
+
+<h2>File to ArrayBuffer</h2>
+
+<p>如果直接用 Ajax 方式载入文件的话，不需要再一次的转，但是我喜欢下面两种，但 File 又不能直接用所以我们需要把 File 类转成 ArrayBuffer。所以这里我们需要用到 <a href="https://developer.mozilla.org/en/docs/Web/API/FileReader">FileReader</a>。</p>
+
+<pre><code class="language-javascript"> buffer: function() {
+    var that = this,
+        reader = new FileReader(); // 新建 FileReader 对象
+
+    // 加载完成后运行
+    reader.onload = function(e) {
+      var result = e.target.result,
+          audio = that.audio;
+
+      audio.decodeAudioData(result, function(buffer){
+      }, function() {
+        console.log('Cannot decode the file.'); // 无法解析文件
+      });
+    }
+
+    reader.readAsArrayBuffer(that.file); // 解析
+  }
+</code></pre>
+
+<h2>播放声音</h2>
+
+<p>这样我们还不够是不是，我们得先把声音给播放出来。
+为了然 <code>audioContext</code> 丰富多样，我们得先把 <code>buffer</code> 赋给 <code>audioContext</code></p>
+
+<pre><code class="language-javascript">that.source = audio.createBufferSource();
+that.source.buffer = buffer;
+</code></pre>
+
+<p>有了这两个东西我们就能开始播放了。</p>
+
+<pre><code class="language-javascript">that.source.start(0);
+</code></pre>
+
+<p>参数中的 0 表示时间，我们要从 0 开始播放。
+没有声音？你还没有扬声器怎么会有声音呢。</p>
+
+<pre><code class="language-javascript">that.source.connect(that.audio.destination);
+</code></pre>
+
+<p>这下就有声音了吧！</p>
+
+<h2>创建分析器</h2>
+
+<p>我们能播放声音后，还需要一个东西来帮组我们提取数据，那就是分析器。</p>
+
+<pre><code class="language-javascript">var analyser = audio.createAnalyser();
+</code></pre>
+
+<p>在上面，我们是直接把 <code>audioBufferSouceNode</code> 与 <code>audioContext.destination</code> 连接在一起的，所以能直接播放到扬声器。</p>
+
+<p>但是我们这里需要在播放器拦截，所以得把 <code>analyser</code> 和 <code>audioBufferSouceNode</code> 连接，再把 <code>analyser</code> 连回 <code>destination</code></p>
+
+<pre><code>that.source.connect(analyser);
+analyser.connect(that.audio.destination);
+</code></pre>
+
+<p>所以这里我们考虑兼容的话，整理代码会得到：</p>
+
+<pre><code class="language-javascript">...
+reader.onload = function(e) {
+      var result = e.target.result,
+          audio = that.audio,
+          analyser = audio.createAnalyser();
+
+      // 如果有在播放的音频，停下他
+      if (that.source) {
+        if (!that.source.stop) { // 在旧的浏览器中 用 nodeOff 来代替
+          that.source.nodeOff(0);
+        } else {
+          that.source.stop(0);
+        }
+      }
+
+      audio.decodeAudioData(result, function(buffer) {
+        that.source        = audio.createBufferSource();
+        that.source.buffer = buffer;
+
+        that.source.connect(analyser);
+        analyser.connect(that.audio.destination);
+
+        if (!that.source.start) { // 在旧的浏览器中 用 nodeOn 来代替
+          that.source.noteOn(0);
+        } else {
+          that.source.start(0);
+        }
+
+        that.visualizer(analyser); // 进入下一步
+
+      }, function() {
+        console.log('Cannot decode the file.'); // 无法解析文件
+      });
+    }
+
+    reader.readAsArrayBuffer(that.file); // 解析
+  },
+...
+</code></pre>
+
+<h2>分析</h2>
+
+<p>我们通过分析器，能得到频率的能力值。</p>
+
+<pre><code class="language-javascript">var data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        console.log(data);
+</code></pre>
+
+<p>这个 <code>data</code> 中储存了所以从低频到高频的所有数据，用这个我们能绘成一个简单的可视图。
+类似直角坐标系一样，把 Hz 当作 x 轴，能力当作 y 轴，就能有一个简单的可视图。</p>
+
+<figure>
+<img src="//hime.io/images/2015/07/13/4439181329991226.png" />
+<figcaption>简单的可视图</figcaption>
+</figure>
+
+<pre><code class="language-javascript">visualizer: function(analyser) {
+    var that = this,
+        canvas  = that.audioCanvas, // 获取 Canvas
+        context = canvas.getContext('2d'),
+        cWidth  = canvas.width, // Canvas 宽度
+        cHeight = canvas.height; // Canvas 高度
+
+    var bars = [],
+        spacing  = 1, // 间距
+        barWidth = 5, // 每条的宽度
+        barNums  = cWidth / (barWidth + spacing); // 总共画的数量
+
+    var gradient = context.createLinearGradient(0, 0, 0, cHeight);
+        gradient.addColorStop(1, '#2FEF64');
+        gradient.addColorStop(0.6, '#F4FF57');
+        gradient.addColorStop(0.3, '#FFB34F');
+        gradient.addColorStop(0, '#FF5B2A');
+
+    var drawBar = function() {
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      context.clearRect(0, 0, cWidth, cHeight);
+
+      for (var i = 0; i &lt; data.length; i++) {
+        var value = data[i];
+
+        if (bars.length &lt; Math.round(barNums)) {
+          bars.push(value);
+        };
+
+        context.fillStyle = gradient;
+        context.fillRect(i, cHeight - value, 1, cHeight);
+      }
+
+      requestAnimationFrame(drawBar);
+    }
+
+    requestAnimationFrame(drawBar);
+  }
+</code></pre>
+
+<p>我们的目的还没达到，因为我们需要的是实现的是那种分条的，所以我们就需要采样了。</p>
+
+<h2>采样</h2>
+
+<pre><code class="language-javascript">    var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+
+    var that = this,
+        canvas  = that.audioCanvas, // 获取 Canvas
+        context = canvas.getContext('2d'),
+        cWidth  = canvas.width, // Canvas 宽度
+        cHeight = canvas.height; // Canvas 高度
+
+    var bars = [],
+        spacing  = 1, // 间距
+        barWidth = 5, // 每条的宽度
+        barNums  = cWidth / (barWidth + spacing),
+        step = Math.round(data.length / barNums); // 总共画的数量
+</code></pre>
+
+<p>这个 <code>step</code> 就是我们需要的步长，用来采样。
+然后具体的代码长这样</p>
+
+<pre><code class="language-javascript">  visualizer: function(analyser) {
+    var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+
+    var that = this,
+        canvas  = that.audioCanvas, // 获取 Canvas
+        context = canvas.getContext('2d'),
+        cWidth  = canvas.width, // Canvas 宽度
+        cHeight = canvas.height; // Canvas 高度
+
+    var bars = [],
+        spacing  = 1, // 间距
+        barWidth = 5, // 每条的宽度
+        barNums  = cWidth / (barWidth + spacing),
+        step = Math.round(data.length / barNums); // 总共画的数量
+
+    var gradient = context.createLinearGradient(0, 0, 0, cHeight);
+        gradient.addColorStop(1, '#2FEF64');
+        gradient.addColorStop(0.6, '#F4FF57');
+        gradient.addColorStop(0.3, '#FFB34F');
+        gradient.addColorStop(0, '#FF5B2A');
+
+    var drawBar = function() {
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      var step = Math.round(data.length / barNums); //计算采样步长
+      context.clearRect(0, 0, cWidth, cHeight); // 清除画布
+
+      for (var i = 0; i &lt; barNums; i++) {
+        var value = data[i * step];
+        context.fillStyle = gradient;
+        context.fillRect(i * 12, cHeight - value + spacing, barWidth, cHeight);
+      }
+
+      requestAnimationFrame(drawBar);
+    }
+
+    requestAnimationFrame(drawBar);
+  }
+</code></pre>
+
+<h2>结束</h2>
+
+<p>播放完了怎么办呢？对 <code>audioBufferSouceNode</code> 监听 <code>onended</code> 事件就好啦。</p>
+
+<pre><code class="language-javascript">audioBufferSouceNode.onended = function() {
+  console.log('播放完了');
+}
+</code></pre>
+
+<p>然后我们就写完了，更多对能力条的自定义，自己写写？说不定有意外的收获？</p>
+
+<pre><code class="language-javascript">window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
+  
+var Analyser = {
+  init: function() {
+    // 判断是否支持 AudioContext
+    try {
+      this.audio = new window.AudioContext();
+    } catch (e) {
+      console.log('AudioContext does not support your browser');
+      return false;
+    }
+
+    this.eventInit(); // 事件初始化
+  },
+
+  eventInit: function() {
+    var that = this;
+
+    that.file = new Object;
+    that.audioInput = document.getElementById('uploadFile');
+    that.audioCanvas = document.getElementById('canvas');
+
+    that.audioInput.addEventListener('change', function() {
+      // 防止空文件
+      if (that.audioInput.files.length !== 0) {
+        if (that.file.name === that.audioInput.files[0].name) return; // 为了统一 Chrome 和 Firefox 下的表现，选择同一文件是 Firefox 会做出表现，而 Chrome 并不会。
+                
+        that.file = that.audioInput.files[0]; // 将文件赋值到 Visualizer 对象的属性上
+        that.buffer();
+      }
+    }, false); // 注册事件
+
+    that.audioCanvas.addEventListener('dragover', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }, false);
+
+    that.audioCanvas.addEventListener('drop', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+
+      if (that.file.name === e.dataTransfer.files[0].name) return;
+      that.file = e.dataTransfer.files[0];
+      that.buffer();
+    }, false);
+  },
+
+  buffer: function() {
+    var that = this,
+        reader = new FileReader(); // 新建 FileReader 对象
+
+    // 加载完成后运行
+    reader.onload = function(e) {
+      var result = e.target.result,
+          audio = that.audio,
+          analyser = audio.createAnalyser();
+
+      // 如果有在播放的音频，停下他
+      if (that.source) {
+        if (!that.source.stop) { // 在旧的浏览器中 用 nodeOff 来代替
+          that.source.nodeOff(0);
+        } else {
+          that.source.stop(0);
+        }
+      }
+
+      audio.decodeAudioData(result, function(buffer) {
+        that.source        = audio.createBufferSource();
+        that.source.buffer = buffer;
+
+        that.source.connect(analyser);
+        analyser.connect(that.audio.destination);
+
+        if (!that.source.start) { // 在旧的浏览器中 用 nodeOn 来代替
+          that.source.noteOn(0);
+        } else {
+          that.source.start(0);
+        }
+
+        that.source.onended = function() {
+          console.log('播放完了');
+        }
+
+        that.visualizer(analyser); // 进入下一步
+
+      }, function() {
+        console.log('Cannot decode the file.'); // 无法解析文件
+      });
+    }
+
+    reader.readAsArrayBuffer(that.file); // 解析
+  },
+
+  visualizer: function(analyser) {
+    var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+
+    var that = this,
+        canvas  = that.audioCanvas, // 获取 Canvas
+        context = canvas.getContext('2d'),
+        cWidth  = canvas.width, // Canvas 宽度
+        cHeight = canvas.height; // Canvas 高度
+
+    var bars = [],
+        spacing  = 1, // 间距
+        barWidth = 5, // 每条的宽度
+        barNums  = cWidth / (barWidth + spacing),
+        step = Math.round(data.length / barNums); // 总共画的数量
+
+    var gradient = context.createLinearGradient(0, 0, 0, cHeight);
+        gradient.addColorStop(1, '#2FEF64');
+        gradient.addColorStop(0.6, '#F4FF57');
+        gradient.addColorStop(0.3, '#FFB34F');
+        gradient.addColorStop(0, '#FF5B2A');
+
+    var drawBar = function() {
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      var step = Math.round(data.length / barNums); //计算采样步长
+      context.clearRect(0, 0, cWidth, cHeight); // 清除画布
+
+      for (var i = 0; i &lt; barNums; i++) {
+        var value = data[i * step];
+        context.fillStyle = gradient;
+        context.fillRect(i * 12, cHeight - value + spacing, barWidth, cHeight);
+      }
+
+      requestAnimationFrame(drawBar);
+    }
+
+    requestAnimationFrame(drawBar);
+  }
+};
+
+Analyser.init();
+</code></pre>
+
+<p>这是完整的代码。</p>
+
+<h2>参考资料</h2>
+
+<ol>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API">https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Using_files_from_web_applications">https://developer.mozilla.org/en-US/docs/Using_files_from_web_applications</a></li>
+<li><a href="https://developer.mozilla.org/en/docs/Web/API/FileReader">https://developer.mozilla.org/en/docs/Web/API/FileReader</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode">https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode</a></li>
+<li><a href="http://cbrandolino.github.io/local-audio-visualizer/docs/local_audio_visualizer">http://cbrandolino.github.io/local-audio-visualizer/docs/local_audio_visualizer</a></li>
+<li><a href="http://wayou.github.io/HTML5_Audio_Visualizer/js/html5_audio_visualizer.js">http://wayou.github.io/HTML5_Audio_Visualizer/js/html5_audio_visualizer.js</a></li>
+</ol>
+
+            </section>
+        </article>
+
+        <section class="article-recommend">
+            
+
+            
+                <section class="nav next">
+                    <div class="head">Prev Reading</div>
+                    <a class="link" href="/blog//post/2015/07/11/ghost-theme-lein.html">Lein - White Simple Ghost Theme ($12 / ￥75)</a>
+                </section>
+            
+        </section>
+
+        <section id="disqus_thread"></section>
+    </main>
+
+    <footer id="footer">
+    <div class="container">
+        <p class="copyright">
+            &copy;
+            <script type="text/javascript">
+                document.write(new Date().getFullYear());
+            </script> RaKunr
+            <span class="sp">/</span>
+            <a href="http://creativecommons.org/licenses/by-nc/4.0/deed.zh" target="_blank">CC-BY-NC-4.0</a>
+        </p>
+        <p>拒绝任何形式的扒皮和抄袭。</p>
+        <p>
+            Powered by <a href="http://www.inkpaper.io/" target="_blank">Ink</a>
+            <span class="sp">/</span>
+            Theme by <a href="http://rakume.com/" target="_blank">Rakume</a> 
+        </p>
+    </div>
+</footer>
+
+    <script src="/blog//js/jquery-1.11.2.min.js"></script>
+    <script src="/blog//js/highlight.pack.js"></script>
+    <script src="/blog//js/index.js"></script>
+    <script type="text/javascript">
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//rakunr.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+</body>
+</html>
