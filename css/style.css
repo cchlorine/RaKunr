@@ -606,7 +606,11 @@ th {
 .menu-on #nav .nav-switch:hover {
   right: -3em;
 }
-#header.no-index #nav {
+.no-index .cont {
+  width: 70%;
+  margin: 0 auto;
+}
+.no-index #nav {
   left: 0;
   top: 0;
   width: 100%;
@@ -615,7 +619,7 @@ th {
   -webkit-transform: translate(0);
   transform: translate(0);
 }
-#header.no-index #nav .nav-switch {
+.no-index #nav .nav-switch {
   display: none;
 }
 @media (max-width: 960px) {
