@@ -4,16 +4,20 @@ github.com style (c) Vasily Polovnyov <vast@whiteants.net>
 
 */
 
+code, pre {
+  font-family: "Source Code Pro", Monaco, Menlo, Consolas, "Courier New", monospace;
+}
+
 pre {
-    margin: 1em -2em;
+  margin: 1em -2em;
+  padding: 1em 2em;
+  color: #333;
+  background: #f8f8f8;
 }
 
 .hljs {
   display: block;
   overflow-x: auto;
-  padding: 1em 2em;
-  color: #333;
-  background: #f8f8f8;
   -webkit-text-size-adjust: none;
 
   word-wrap: break-word;
