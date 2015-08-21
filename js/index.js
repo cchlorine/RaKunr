@@ -11,7 +11,7 @@
 
   document.onscroll = function(e) {
     var title, top;
-    document.querySelector('#header-bg').style.cssText += 'top: ' + window.scrollY / 20 + 'px';
+    document.querySelector('#header-bg').style.cssText += 'top: ' + window.scrollY / 5 + 'px';
     title = document.querySelector('.site-title');
     if (!title) {
       return;
