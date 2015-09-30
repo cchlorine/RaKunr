@@ -1,8 +1,16 @@
 var Koishumi;
 
 Koishumi = (function(W, D) {
-  var getArticle, getConfig, getList, hash, loadScript, matching, showList, time;
+  var converter, getArticle, getConfig, getList, hash, loadScript, matching, showList, time;
   hash = '';
+  converter = new showdown.Converter({
+    omitExtraWLInCodeBlocks: true,
+    parseImgDimensions: true,
+    simplifiedAutoLink: true,
+    literalMidWordUnderscores: true,
+    tables: true,
+    tasklists: true
+  });
   time = function(value) {
     var day, month;
     month = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -71,7 +79,7 @@ Koishumi = (function(W, D) {
           comment: {
             type: getConfig('type', 'comment')
           },
-          content: (new showdown.Converter).makeHtml(data)
+          content: converter.makeHtml(data)
         });
         switch (config.comment.type) {
           case 'disqus':
