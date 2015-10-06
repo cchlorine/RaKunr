@@ -1,7 +1,6 @@
-上个星期因为需求折腾了个 [Git](http://en.wikipedia.org/wiki/Git_%28software%29) 的 Webhook 来实现自动部署，因为我是 PHP 环境，所以直接用 PHP 写了个。
+上个星期因为需求折腾了个 [Git](https://git-scm.com) 的 Webhook 来实现自动部署，因为我是 PHP 环境，所以直接用 PHP 写了个。
 
-![Git Webhook 工作原理](//hime.io/images/2015/03/14/1290128163559516.png)
-<!--more-->
+![Git Webhook 工作原理](https://hime.io/images/2015/03/14/1290128163559516.png)
 
 ## 服务端
 ### 生成 key
