@@ -1,7 +1,6 @@
 上个星期因为需求折腾了个 [Git](http://en.wikipedia.org/wiki/Git_%28software%29) 的 Webhook 来实现自动部署，因为我是 PHP 环境，所以直接用 PHP 写了个。
 
-![Git Webhook 工作原理](//hime.io/images/2015/03/14/1290128163559516.png)
-<!--more-->
+![Git Webhook 工作原理](https://hime.io/images/2015/03/14/1290128163559516.png)
 
 ## 服务端
 ### 生成 key
@@ -94,7 +93,6 @@ git checkout master
 git pull origin master >> /home/wwwroot/.deploy/deploy.log
 echo "" >> /home/wwwroot/.deploy/deploy.log
 ```
-嗯，服务端就这样了
 
 ## Gitlab
 这个直接添加一下你 update.php 所在的地址要包括 token，然后添加一下 ssh 公匙就行了~
