@@ -93,7 +93,6 @@ git checkout master
 git pull origin master >> /home/wwwroot/.deploy/deploy.log
 echo "" >> /home/wwwroot/.deploy/deploy.log
 ```
-嗯，服务端就这样了
 
 ## Gitlab
 这个直接添加一下你 update.php 所在的地址要包括 token，然后添加一下 ssh 公匙就行了~
