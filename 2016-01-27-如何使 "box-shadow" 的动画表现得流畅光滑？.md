@@ -1,0 +1,213 @@
+你如何避免重绘而又能保证 `box-shadow` 的动画，并且不影响到你页面的效果呢？实际上：你不能。box-shadow 的动画十分影响流畅性。
+
+How do you animate the `box-shadow` property in CSS without causing re-paints on every frame, and heavily impacting the performance of your page? Short answer: you don't. Animating a change of box-shadow will hurt performance.
+
+但是，这里有一个及简单又优雅的能达到类似效果的方法，以最少的重绘，来保证你的动画以 60 FPS 的帧率运行：那就是，改变伪元素的 `opacity`，以实现 `box-shadow` 的动画效果。
+
+There's an easy way of mimicking the same effect, however, with minimal re-paints, that should let your animations run at a solid 60 FPS: animate the `opacity` of a pseudo-element.
+
+## 演示（Demo）
+
+![实际上的效果的录像（Recording of box-shadow demo in action）](//c.hime.io/images/QOBw.gif)
+
+[点击这里查看演示](http://tobiasahlin.com/demo/animate-box-shadow/)并且对比一下我们所要讲的两种不同的方法的区别。如果你看起来觉得这两个动画一样，那就对了。因为唯一的不同是，我们如何实现阴影的动画。左边的那部分，我们让 `box-shadow` 在 `hover` 后被赋值，而右边的那部分，则是使用了伪元素 `::after`，让阴影附加在伪元素上，并且通过 `opacity` 的变化来实现与左边相同、甚至更流畅的效果。
+
+[Have a look at the demo](http://tobiasahlin.com/demo/animate-box-shadow/) and compare the two different techniques we'll be exploring. If the two examples look the same to you, that's the point. The only difference is how we apply and animate the shadow. On the left we're animating `box-shadow` on `hover`, and on the right we're adding a pseudo-element with ::after, applying the shadow to that, and animating the `opacity` of that element.
+
+如果你打开你的开发者工具，接着将鼠标置悬在这些元素上，你会发现类似这个下图的情况（被上色的绿色部分是重绘所用的时长；越短越好）：
+
+If you bring up your developer tools and hover one of these items, you should see something similar to this (green bars are paints; less is better):
+
+![两种不同动画的实现效率（Animation performance when hovering the different boxes）](https://c.hime.io/images/j0l4.png)
+
+通过它，我们能很明确的知道，当我们划过左边那些卡片时（改变 `box-shadow`），将他与右侧的划过卡片相比（改变伪元素的 `opacity`）。
+
+There are clearly more re-paints when hovering the cards on the left side (animating `box-shadow`), compared to hovering the cards on the right side (which animate the `opacity` of their pseudo-element).
+
+为什么我们会收获到这种效果？因为这里的[少许 CSS 属性](http://csstriggers.com/)动画时是可以不需一直触发每帧的重绘，就如 `opacity` 与 `transform`。我们可以通过改变它俩，从而达到减少重绘的数量（和浏览器所需要去做的）的目的。
+
+Why are we seeing this effect? There are [very few CSS properties](http://csstriggers.com/) that can be animated without constantly triggering repaints for every frame, namely `opacity` and `transform`. We minimize the amount of repaints (and work that your browser has to do) by sticking to only changing these two properties during the animation.
+
+这里是两种方法的**具体的区别**，抛开布局上来讲：
+
+This is the **ritical difference** between the two techniques, stripping out all of the other layout styles:
+
+
+```
+/* 慢的那种方法 */
+/* The slow way */
+.make-it-slow {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: box-shadow 0.3s ease-in-out:
+}
+
+/* 划过后从无到有的阴影 */
+/* Transition to a bigger shadow on hover */
+.make-it-slow:hover {
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* 快的那种方法 */
+/* The fast way */
+.make-it-fast {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+/* 提前渲染好阴影，不过隐藏着的 */
+/* Pre-render the bigger shadow, but hide it */
+.make-it-fast::after {
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out:
+}
+
+/* 划过后阴影显露出来 */
+/* Transition to showing the bigger shadow on hover */
+.make-it-fast:hover::after {
+  opacity: 1;
+}
+```
+
+从示例中，我们可以看到，更有效率的那一种方法中，有两层：一层给卡片，另外一层是阴影的，并且，动画只改变阴影的 `opacity`。
+
+In the example that performs better we have two layers: one for the box, and one for the shadow, and only animate the opacity property of the shadow layer.
+
+## 分解（Breaking it down）
+
+有了基本原理，那就让我们来看看如何创建的[3D 效果卡片](http://tobiasahlin.com/demo/animate-box-shadow/)。第一步，就是需要给伪元素添加阴影，就像我盟在上面做的一样。这一次，我们来写出所有的代码，包括布局：
+
+With the fundamentals in place, let's look at how to create [the 3D card effect showcased in the demo](http://tobiasahlin.com/demo/animate-box-shadow/). The first step is to move the shadow to a pseudo-element, like we did above. Let's also add all of the layout code to create the card:
+
+```
+/* HTML 中你只需要 <div class="box"></div> */
+/* All HTML you need is <div class="box"></div> */
+
+/* 创建一个白色的卡片，然后给它添加默认的阴影状态 */
+/* Create a simple white box, and add the shadow for the initial state */
+.box {
+  position: relative;
+  display: inline-block;
+  width: 100px;
+  height: 100px;
+  border-radius: 5px;
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: all 0.3s ease-in-out;
+}
+
+/* 创建隐藏的伪元素 */
+/* 包括阴影的最后状态 */
+/* Create the hidden pseudo-element */
+/* include the shadow for the end state */
+.box::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border-radius: 5px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  transition: opacity 0.3s ease-in-out;
+}
+```
+
+需要注意的是，我们给 `.box` 和 `.box::after` 添加了一个 `transition`，并且当这些元素开始播放动画的时候，这些属性会发生改变：`.box` 的 `transform` 和 `.box::after` 的 `opacity`。
+
+Note that we're adding a `transition` to both the `.box`, and `.box::after`, since we're going to animate both of these elements: `transform` for `.box`, and `opacity` for `.box::after`.
+
+这三个样式给了我们一个奇妙的 `box-shadow`。更强大的是，`.box::after` 在默认时是完全隐藏的，同时它并不会与卡片相互作用。
+
+These styles give us a white box with a subtle `box-shadow`. The stronger shadow from `.box::after` is completely hidden at this point, and you can't interact with the box:
+
+<div id="box-1"></div>
+<style type="text/css">
+#box-1 { position: relative; display: block; margin: 0 auto; width: 100px; height: 100px; border-radius: 5px; background-color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.15); transition: all 0.3s ease-in-out; }
+#box-1::after { content: ''; position: absolute; z-index: -1; width: 100%; height: 100%; opacity: 0; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: opacity 0.3s ease-in-out; }
+</style>
+
+为了实现与[演示](http://tobiasahlin.com/demo/animate-box-shadow/)中一样的效果，现在我们需要的只是，当 `.box` 被划过时缩放它，并且渐入阴影。
+
+To create the same effect as in the [demo](http://tobiasahlin.com/demo/animate-box-shadow/), now all we need to do is to scale up the `.box` on hover, and fade in the pseudo-element and its shadow:
+
+
+```
+/* 缩放卡片 */
+/* Scale up the box */
+.box:hover {
+  transform: scale(1.2, 1.2);
+}
+
+/* 伪元素的阴影渐入 */
+/* Fade in the pseudo-element with the bigger shadow */
+.box:hover::after {
+  opacity: 1;
+}
+```
+
+好了！就到这了！我们赶紧来看看效果吧。
+
+That's it! Hover the box to preview the effect:
+
+<div id="box-2"></div>
+<style type="text/css">
+#box-2 { position: relative; display: block; margin: 0 auto; width: 100px; height: 100px; border-radius: 5px; background-color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.15); transition: all 0.3s ease-in-out; }
+#box-2::after { content: ''; position: absolute; z-index: -1; width: 100%; height: 100%; opacity: 0; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: opacity 0.3s ease-in-out; }
+#box-2:hover { transform: scale(1.2, 1.2); }
+#box-2:hover::after { opacity: 1; }
+</style>
+
+好了，为了总结，这里是完整的 CSS 代码，自带~~特效~~，并且有着自定义的动画曲线。
+
+To summarize, here's all the CSS, with all vendor prefixes, and some custom easing for additional ✨👌:
+
+```
+.box {
+  position: relative;
+  display: inline-block;
+  width: 100px;
+  height: 100px;
+  background-color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+  -webkit-transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+  transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.box::after {
+  content: "";
+  border-radius: 5px;
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  -webkit-transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+  transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.box:hover {
+  -webkit-transform: scale(1.25, 1.25);
+  transform: scale(1.25, 1.25);
+}
+
+.box:hover::after {
+    opacity: 1;
+}
+```
+
+能确定，我们能用一句简短的话来实现的 `box-shadow` 的动画，我们现在却只是为了高效，却选用了一种许多的 CSS 代码。为什么呢，兄弟？
+
+That's certainly a lot of CSS to achieve the same effect as simply animating `box-shadow`, just with improved performance. Why bother?
+
+即使你的桌面系统能够很好的处理 `box-shadow` 的动画，但是你的手机却可能不行，甚至你的电脑在一些复杂的动画下也会显得吃力。
+
+Even if your desktop likely handles animating `box-shadow` without any issues, your phone may not, and even your desktop may start to stutter when animating a more complex layout.
+
+坚持只对 `transform` 和 `opacity` 使用 transition 和 animation，并且你能确定可以达到最好的效率，有了它，那么用户体验就很帅啦啦啦。
+
+Keep transitions and animations to only transform and opacity, and you're certain to achieve the best possible performance, and with that, the best possible user experience.
